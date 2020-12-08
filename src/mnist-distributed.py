@@ -7,6 +7,7 @@ import torchvision.transforms as transforms
 import torch
 import torch.nn as nn
 import torch.distributed as dist
+import mlflow
 
 
 def main():
@@ -50,6 +51,8 @@ class ConvNet(nn.Module):
 
 
 def train(gpu, args):
+    if gpu == 0:
+        mlflow.log_params(vars(args))
     rank = args.nr * args.gpus + gpu
     dist.init_process_group(backend='nccl', init_method='env://', world_size=args.world_size, rank=rank)
     torch.manual_seed(0)
@@ -94,8 +97,12 @@ def train(gpu, args):
             if (i + 1) % 100 == 0 and gpu == 0:
                 print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(epoch + 1, args.epochs, i + 1, total_step,
                                                                          loss.item()))
+                step = epoch * len(train_loader) + i
+                mlflow.log_metric('train_loss', loss.data.item(), step)
     if gpu == 0:
         print("Training complete in: " + str(datetime.now() - start))
+        torch.save(model.state_dict(), "test.pt")
+        mlflow.log_artifact("test.pt")
 
 
 if __name__ == '__main__':
